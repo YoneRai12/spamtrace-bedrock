@@ -214,6 +214,9 @@ function makePlayerRecord(key) {
     anomalyCount: 0,
     blockHitCount: 0,
     blocklisted: false,
+    trusted: false,
+    admin: false,
+    pendingApproval: false,
     lastMessage: null,
     lastLocation: null,
     lastDimension: null,
@@ -331,6 +334,9 @@ function applyEventToRecord(record, event) {
     record.suspiciousCount += 1;
     record.lastMessage = typeof payload.message === "string" ? payload.message : record.lastMessage;
   }
+  if (event.label === "pending_approval") {
+    record.pendingApproval = true;
+  }
   if (event.label === "player_anomaly_scan") {
     record.anomalyCount += 1;
   }
@@ -423,6 +429,27 @@ function deriveSettings(events) {
   return latest;
 }
 
+function deriveCurrentRoster(events) {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const payload = events[index].payload || {};
+    if (!Array.isArray(payload.roster)) {
+      continue;
+    }
+
+    return payload.roster
+      .map((entry) => ({
+        id: typeof entry.id === "string" && entry.id.trim() ? entry.id.trim() : null,
+        name: typeof entry.name === "string" && entry.name.trim() ? entry.name.trim() : null,
+        nameTag: typeof entry.nameTag === "string" && entry.nameTag.trim() ? entry.nameTag.trim() : null,
+        dimension: typeof entry.dimension === "string" ? entry.dimension : null,
+        location: entry.location && typeof entry.location === "object" ? entry.location : null
+      }))
+      .filter((entry) => entry.id || entry.name);
+  }
+
+  return [];
+}
+
 function buildPlayers(events, blocklist, trustlist) {
   const players = new Map();
   const idIndex = new Map();
@@ -472,6 +499,65 @@ function buildPlayers(events, blocklist, trustlist) {
   });
 }
 
+function buildOnlinePlayers(players, roster) {
+  if (!Array.isArray(roster) || roster.length === 0) {
+    return [];
+  }
+
+  const byId = new Map();
+  const byName = new Map();
+
+  for (const player of players) {
+    if (player.id) {
+      byId.set(player.id, player);
+    }
+    if (player.name) {
+      byName.set(player.name, player);
+    }
+  }
+
+  return roster
+    .map((entry) => {
+      const matched = (entry.id && byId.get(entry.id)) || (entry.name && byName.get(entry.name)) || null;
+      if (!matched) {
+        return {
+          id: entry.id,
+          name: entry.name,
+          nameTag: entry.nameTag,
+          lastDimension: entry.dimension,
+          lastLocation: entry.location,
+          lastSeenAt: null,
+          joinCount: 0,
+          leaveCount: 0,
+          spawnCount: 0,
+          suspiciousCount: 0,
+          anomalyCount: 0,
+          blockHitCount: 0,
+          blocklisted: false,
+          trusted: false,
+          pendingApproval: false,
+          admin: false,
+          messageReasons: [],
+          reasons: [],
+          indicatorTags: [],
+          score: 0,
+          lastMessage: null
+        };
+      }
+
+      return {
+        ...matched,
+        lastDimension: entry.dimension || matched.lastDimension || null,
+        lastLocation: entry.location || matched.lastLocation || null
+      };
+    })
+    .map((player) => ({
+      ...player,
+      admin: player.indicatorTags?.includes("管理者") || false,
+      pendingApproval: player.indicatorTags?.includes("承認待ち") || false
+    }));
+}
+
 function buildState() {
   const logDir = detectLogDir();
   if (!logDir) {
@@ -481,10 +567,12 @@ function buildState() {
       summary: {
         events: 0,
         suspiciousEvents: 0,
+        onlinePlayers: 0,
         trackedPlayers: 0,
         blocklistEntries: 0
       },
       players: [],
+      onlinePlayers: [],
       events: [],
       blocklist: [],
       logDir: null,
@@ -511,6 +599,8 @@ function buildState() {
   const trustlist = deriveTrustlist(events);
   const settings = deriveSettings(events);
   const players = buildPlayers(events, blocklist, trustlist);
+  const currentRoster = deriveCurrentRoster(events);
+  const onlinePlayers = buildOnlinePlayers(players, currentRoster);
   const visibleEvents = events.slice(-EVENT_LIMIT).reverse();
   const suspiciousEvents = events.filter((event) => {
     return event.label === "suspicious_chat" || event.label === "player_anomaly_scan" || event.label === "blocklist_match";
@@ -525,10 +615,12 @@ function buildState() {
     trustlist,
     settings,
     players,
+    onlinePlayers,
     events: visibleEvents,
     summary: {
       events: events.length,
       suspiciousEvents,
+      onlinePlayers: onlinePlayers.length,
       trackedPlayers: players.length,
       blocklistEntries: blocklist.length
     },

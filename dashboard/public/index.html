@@ -9,42 +9,55 @@
   <body>
     <div class="page-shell">
       <header class="hero">
-        <div>
+        <div class="hero-copy">
           <p class="eyebrow">Minecraft Bedrock Local Dashboard</p>
           <h1>SpamTrace ダッシュボード</h1>
           <p class="lead">
-            Content Log に記録された SpamTrace イベントを集約し、怪しい参加者の観測、証拠採取、封じ込めコマンドの送信を行うためのローカル UI です。
+            ローカルホストの Bedrock ワールドで、現在参加中のプレイヤー、証拠ログ、通信観測をまとめて確認するためのローカル UI です。
           </p>
         </div>
         <div class="hero-actions">
-          <button id="refresh-button" class="primary">再読み込み</button>
-          <button data-command="!st scan">手動スキャン</button>
-          <button data-command="!st export">状態を書き出す</button>
-          <button data-command="!st settings">設定確認</button>
+          <button id="refresh-button" class="primary">更新</button>
+          <button data-command="!st scan">スキャン</button>
+          <button data-command="!st export">書き出し</button>
+          <button data-command="!st settings">設定</button>
         </div>
       </header>
 
       <section class="panel">
         <div class="panel-head">
           <div>
-            <h2>即時操作</h2>
-            <p class="muted">アドオンが有効なワールドに対して、管理コマンドを送信します。</p>
+            <h2>クイック操作</h2>
+            <p class="muted">アドオンが有効なワールドに対して、その場で管理コマンドを送れます。</p>
           </div>
           <div id="command-status" class="status-pill">待機中</div>
         </div>
-        <div class="hero-actions control-grid">
-          <button data-command="!st lockdown on">ロックダウン ON</button>
-          <button data-command="!st lockdown off">ロックダウン OFF</button>
-          <button data-command="!st chatgate on">承認待ちチャット ON</button>
-          <button data-command="!st chatgate off">承認待ちチャット OFF</button>
-          <button data-command="!st evidence on">証拠モード ON</button>
-          <button data-command="!st evidence off">証拠モード OFF</button>
-          <button data-command="!st autoblock on">自動ブロック ON</button>
-          <button data-command="!st autoblock off">自動ブロック OFF</button>
-          <button data-command='!st emergency "UI emergency sweep"'>緊急排除</button>
-          <button id="mark-external-button">外部スパムを記録</button>
-          <button data-command="!st trusted">信頼一覧</button>
+
+        <div class="toolbar">
+          <div class="toolbar-group">
+            <span class="toolbar-label">防御</span>
+            <button data-command="!st lockdown on">ロックダウン ON</button>
+            <button data-command="!st lockdown off">ロックダウン OFF</button>
+            <button data-command="!st autoblock on">自動ブロック ON</button>
+            <button data-command="!st autoblock off">自動ブロック OFF</button>
+          </div>
+
+          <div class="toolbar-group">
+            <span class="toolbar-label">承認と証拠</span>
+            <button data-command="!st chatgate on">承認待ち ON</button>
+            <button data-command="!st chatgate off">承認待ち OFF</button>
+            <button data-command="!st evidence on">証拠 ON</button>
+            <button data-command="!st evidence off">証拠 OFF</button>
+            <button id="mark-external-button">外部スパムを記録</button>
+          </div>
+
+          <div class="toolbar-group">
+            <span class="toolbar-label">一覧</span>
+            <button data-command="!st trusted">信頼一覧</button>
+            <button data-command='!st emergency "UI emergency sweep"' class="danger-soft">緊急排除</button>
+          </div>
         </div>
+
         <form id="command-form" class="command-form">
           <input
             id="command-input"
@@ -58,32 +71,23 @@
 
       <section class="summary-grid" id="summary-grid"></section>
 
-      <section class="panel">
-        <div class="panel-head">
-          <div>
-            <h2>観測情報</h2>
-            <p id="meta-line" class="muted"></p>
-          </div>
-        </div>
-        <div id="caveats" class="caveat-list"></div>
-      </section>
-
       <section class="layout-grid">
         <section class="panel">
           <div class="panel-head">
             <div>
-              <h2>参加者一覧</h2>
-              <p class="muted">スコアが高いほど、怪しいイベントが多く観測されています。</p>
+              <h2>現在参加中のプレイヤー</h2>
+              <p class="muted">いまワールド内にいるプレイヤーだけを表示します。</p>
             </div>
+            <p id="meta-line" class="muted"></p>
           </div>
           <div id="player-list" class="stack"></div>
         </section>
 
-        <section class="panel">
+        <section class="panel side-panel">
           <div class="panel-head">
             <div>
               <h2>通信観測</h2>
-              <p class="muted">ホスト PC から見えた TCP / UDP 情報を表示します。</p>
+              <p class="muted">ホスト PC から見えた TCP / UDP 情報です。</p>
             </div>
           </div>
           <div id="network-panel" class="stack"></div>
@@ -93,8 +97,18 @@
       <section class="panel">
         <div class="panel-head">
           <div>
+            <h2>注意事項</h2>
+            <p class="muted">UI で扱える情報の限界です。</p>
+          </div>
+        </div>
+        <div id="caveats" class="caveat-list"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div>
             <h2>最新イベント</h2>
-            <p class="muted">新しい順に最大 180 件を表示します。</p>
+            <p class="muted">新しい順に最大 180 件まで表示します。</p>
           </div>
         </div>
         <div id="event-list" class="event-list"></div>
@@ -104,18 +118,41 @@
     <template id="player-card-template">
       <article class="player-card">
         <div class="player-main">
-          <div class="player-title-row">
-            <h3 class="player-name"></h3>
+          <div class="player-header">
+            <div>
+              <h3 class="player-name"></h3>
+              <p class="player-subline"></p>
+            </div>
             <span class="score-pill"></span>
           </div>
-          <p class="player-meta"></p>
+
           <div class="tag-row"></div>
-          <p class="player-stats muted"></p>
+
+          <dl class="player-meta-grid">
+            <div>
+              <dt>ID</dt>
+              <dd class="player-id"></dd>
+            </div>
+            <div>
+              <dt>nameTag</dt>
+              <dd class="player-nametag"></dd>
+            </div>
+            <div>
+              <dt>最終位置</dt>
+              <dd class="player-location"></dd>
+            </div>
+            <div>
+              <dt>観測</dt>
+              <dd class="player-stats"></dd>
+            </div>
+          </dl>
+
           <p class="player-message"></p>
         </div>
+
         <div class="player-actions">
-          <button class="kick-button">キック</button>
-          <button class="quarantine-button">隔離</button>
+          <button class="kick-button danger-soft">キック</button>
+          <button class="quarantine-button danger-soft">隔離</button>
           <button class="trust-id-button">IDで信頼</button>
           <button class="trust-name-button">名前で信頼</button>
           <button class="block-id-button">IDでブロック</button>
