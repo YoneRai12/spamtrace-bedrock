@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SpamTrace ダッシュボード</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">Minecraft Bedrock Local Dashboard</p>
+          <h1>SpamTrace ダッシュボード</h1>
+          <p class="lead">
+            Content Log に記録された SpamTrace イベントを集約し、怪しい参加者の観測、証拠採取、封じ込めコマンドの送信を行うためのローカル UI です。
+          </p>
+        </div>
+        <div class="hero-actions">
+          <button id="refresh-button" class="primary">再読み込み</button>
+          <button data-command="!st scan">手動スキャン</button>
+          <button data-command="!st export">状態を書き出す</button>
+          <button data-command="!st settings">設定確認</button>
+        </div>
+      </header>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>即時操作</h2>
+            <p class="muted">アドオンが有効なワールドに対して、管理コマンドを送信します。</p>
+          </div>
+          <div id="command-status" class="status-pill">待機中</div>
+        </div>
+        <div class="hero-actions control-grid">
+          <button data-command="!st lockdown on">ロックダウン ON</button>
+          <button data-command="!st lockdown off">ロックダウン OFF</button>
+          <button data-command="!st chatgate on">承認待ちチャット ON</button>
+          <button data-command="!st chatgate off">承認待ちチャット OFF</button>
+          <button data-command="!st evidence on">証拠モード ON</button>
+          <button data-command="!st evidence off">証拠モード OFF</button>
+          <button data-command="!st autoblock on">自動ブロック ON</button>
+          <button data-command="!st autoblock off">自動ブロック OFF</button>
+          <button data-command='!st emergency "UI emergency sweep"'>緊急排除</button>
+          <button id="mark-external-button">外部スパムを記録</button>
+          <button data-command="!st trusted">信頼一覧</button>
+        </div>
+        <form id="command-form" class="command-form">
+          <input
+            id="command-input"
+            type="text"
+            placeholder='例: !st trust name "FriendName" "friend"'
+            autocomplete="off"
+          />
+          <button type="submit" class="primary">送信</button>
+        </form>
+      </section>
+
+      <section class="summary-grid" id="summary-grid"></section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>観測情報</h2>
+            <p id="meta-line" class="muted"></p>
+          </div>
+        </div>
+        <div id="caveats" class="caveat-list"></div>
+      </section>
+
+      <section class="layout-grid">
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>参加者一覧</h2>
+              <p class="muted">スコアが高いほど、怪しいイベントが多く観測されています。</p>
+            </div>
+          </div>
+          <div id="player-list" class="stack"></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>通信観測</h2>
+              <p class="muted">ホスト PC から見えた TCP / UDP 情報を表示します。</p>
+            </div>
+          </div>
+          <div id="network-panel" class="stack"></div>
+        </section>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>最新イベント</h2>
+            <p class="muted">新しい順に最大 180 件を表示します。</p>
+          </div>
+        </div>
+        <div id="event-list" class="event-list"></div>
+      </section>
+    </div>
+
+    <template id="player-card-template">
+      <article class="player-card">
+        <div class="player-main">
+          <div class="player-title-row">
+            <h3 class="player-name"></h3>
+            <span class="score-pill"></span>
+          </div>
+          <p class="player-meta"></p>
+          <div class="tag-row"></div>
+          <p class="player-stats muted"></p>
+          <p class="player-message"></p>
+        </div>
+        <div class="player-actions">
+          <button class="kick-button">キック</button>
+          <button class="quarantine-button">隔離</button>
+          <button class="trust-id-button">IDで信頼</button>
+          <button class="trust-name-button">名前で信頼</button>
+          <button class="block-id-button">IDでブロック</button>
+          <button class="unblock-button">解除</button>
+        </div>
+      </article>
+    </template>
+
+    <script src="/app.js" defer></script>
+  </body>
+</html>

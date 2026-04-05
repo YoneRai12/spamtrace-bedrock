@@ -1,0 +1,9 @@
+{
+  "name": "spamtrace-bedrock-dashboard",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Local dashboard for the SpamTrace Minecraft Bedrock addon.",
+  "scripts": {
+    "start": "node server.js"
+  }
+}
