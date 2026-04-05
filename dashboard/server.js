@@ -2,7 +2,7 @@ const http = require("node:http");
 const fs = require("node:fs");
 const path = require("node:path");
 const os = require("node:os");
-const { execFile } = require("node:child_process");
+const { execFile, spawn } = require("node:child_process");
 const { promisify } = require("node:util");
 
 const execFileAsync = promisify(execFile);
@@ -15,6 +15,8 @@ const NETWORK_SCRIPT = path.join(ROOT, "scripts", "network-snapshot.ps1");
 const TRACE_PREFIX = "[SpamTrace]";
 const PORT = Number(process.env.SPAMTRACE_PORT || 3984);
 const HOST = "127.0.0.1";
+const DASHBOARD_URL = `http://${HOST}:${PORT}`;
+const AUTO_OPEN_BROWSER = process.env.SPAMTRACE_OPEN_BROWSER !== "0";
 const MAX_LOG_BYTES = 1_500_000;
 const LOG_FILE_LIMIT = 4;
 const EVENT_LIMIT = 180;
@@ -28,11 +30,56 @@ const stateCache = {
   value: null
 };
 
+let browserOpened = false;
+
 function exists(targetPath) {
   try {
     return fs.existsSync(targetPath);
   } catch {
     return false;
+  }
+}
+
+function detectChromeExecutable() {
+  const candidates = [
+    path.join(process.env.LOCALAPPDATA || "", "Google", "Chrome", "Application", "chrome.exe"),
+    path.join(process.env.PROGRAMFILES || "", "Google", "Chrome", "Application", "chrome.exe"),
+    path.join(process.env["PROGRAMFILES(X86)"] || "", "Google", "Chrome", "Application", "chrome.exe")
+  ].filter(Boolean);
+
+  return candidates.find((candidate) => exists(candidate)) || null;
+}
+
+function openDashboardBrowser(url) {
+  if (!AUTO_OPEN_BROWSER || browserOpened) {
+    return;
+  }
+
+  browserOpened = true;
+  const chromePath = detectChromeExecutable();
+
+  try {
+    if (chromePath) {
+      const child = spawn(chromePath, [url], {
+        detached: true,
+        stdio: "ignore",
+        windowsHide: true
+      });
+      child.unref();
+      console.log(`[SpamTrace UI] browser=chrome url=${url}`);
+      return;
+    }
+
+    const child = spawn("cmd.exe", ["/c", "start", "", url], {
+      detached: true,
+      stdio: "ignore",
+      windowsHide: true
+    });
+    child.unref();
+    console.log(`[SpamTrace UI] browser=default url=${url}`);
+  } catch (error) {
+    browserOpened = false;
+    console.warn(`[SpamTrace UI] browser open failed: ${error.message}`);
   }
 }
 
@@ -696,5 +743,6 @@ server.on("error", (error) => {
 });
 
 server.listen(PORT, HOST, () => {
-  console.log(`[SpamTrace UI] http://${HOST}:${PORT}`);
+  console.log(`[SpamTrace UI] ${DASHBOARD_URL}`);
+  openDashboardBrowser(DASHBOARD_URL);
 });
