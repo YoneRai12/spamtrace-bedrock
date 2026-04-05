@@ -8,111 +8,116 @@
   </head>
   <body>
     <div class="page-shell">
-      <header class="hero">
+      <header class="hero panel">
         <div class="hero-copy">
           <p class="eyebrow">Minecraft Bedrock Local Dashboard</p>
           <h1>SpamTrace ダッシュボード</h1>
           <p class="lead">
-            ローカルホストの Bedrock ワールドで、現在参加中のプレイヤー、証拠ログ、通信観測をまとめて確認するためのローカル UI です。
+            現在参加中のプレイヤー、ライブログ、通信観測、封じ込めコマンドを 1 画面で扱うためのローカル UI です。
           </p>
         </div>
         <div class="hero-actions">
-          <button id="refresh-button" class="primary">更新</button>
+          <button id="refresh-button" class="primary">今すぐ更新</button>
           <button data-command="!st scan">スキャン</button>
           <button data-command="!st export">書き出し</button>
           <button data-command="!st settings">設定</button>
         </div>
       </header>
 
-      <section class="panel">
-        <div class="panel-head">
-          <div>
-            <h2>クイック操作</h2>
-            <p class="muted">アドオンが有効なワールドに対して、その場で管理コマンドを送れます。</p>
-          </div>
-          <div id="command-status" class="status-pill">待機中</div>
-        </div>
-
-        <div class="toolbar">
-          <div class="toolbar-group">
-            <span class="toolbar-label">防御</span>
-            <button data-command="!st lockdown on">ロックダウン ON</button>
-            <button data-command="!st lockdown off">ロックダウン OFF</button>
-            <button data-command="!st autoblock on">自動ブロック ON</button>
-            <button data-command="!st autoblock off">自動ブロック OFF</button>
-          </div>
-
-          <div class="toolbar-group">
-            <span class="toolbar-label">承認と証拠</span>
-            <button data-command="!st chatgate on">承認待ち ON</button>
-            <button data-command="!st chatgate off">承認待ち OFF</button>
-            <button data-command="!st evidence on">証拠 ON</button>
-            <button data-command="!st evidence off">証拠 OFF</button>
-            <button id="mark-external-button">外部スパムを記録</button>
-          </div>
-
-          <div class="toolbar-group">
-            <span class="toolbar-label">一覧</span>
-            <button data-command="!st trusted">信頼一覧</button>
-            <button data-command='!st emergency "UI emergency sweep"' class="danger-soft">緊急排除</button>
-          </div>
-        </div>
-
-        <form id="command-form" class="command-form">
-          <input
-            id="command-input"
-            type="text"
-            placeholder='例: !st trust name "FriendName" "friend"'
-            autocomplete="off"
-          />
-          <button type="submit" class="primary">送信</button>
-        </form>
-      </section>
-
       <section class="summary-grid" id="summary-grid"></section>
 
-      <section class="layout-grid">
-        <section class="panel">
-          <div class="panel-head">
-            <div>
-              <h2>現在参加中のプレイヤー</h2>
-              <p class="muted">いまワールド内にいるプレイヤーだけを表示します。</p>
+      <div class="dashboard-grid">
+        <main class="main-column">
+          <section class="panel">
+            <div class="panel-head">
+              <div>
+                <h2>クイック操作</h2>
+                <p class="muted">ワールドに対してすぐに管理コマンドを送れます。</p>
+              </div>
+              <div id="command-status" class="status-pill">待機中</div>
             </div>
-            <p id="meta-line" class="muted"></p>
-          </div>
-          <div id="player-list" class="stack"></div>
-        </section>
 
-        <section class="panel side-panel">
-          <div class="panel-head">
-            <div>
-              <h2>通信観測</h2>
-              <p class="muted">ホスト PC から見えた TCP / UDP 情報です。</p>
+            <div class="toolbar">
+              <div class="toolbar-group">
+                <span class="toolbar-label">防御</span>
+                <button data-command="!st lockdown on">ロックダウン ON</button>
+                <button data-command="!st lockdown off">ロックダウン OFF</button>
+                <button data-command="!st autoblock on">自動ブロック ON</button>
+                <button data-command="!st autoblock off">自動ブロック OFF</button>
+              </div>
+
+              <div class="toolbar-group">
+                <span class="toolbar-label">承認と証拠</span>
+                <button data-command="!st chatgate on">承認待ち ON</button>
+                <button data-command="!st chatgate off">承認待ち OFF</button>
+                <button data-command="!st evidence on">証拠 ON</button>
+                <button data-command="!st evidence off">証拠 OFF</button>
+                <button id="mark-external-button">外部スパムを記録</button>
+              </div>
+
+              <div class="toolbar-group">
+                <span class="toolbar-label">一覧</span>
+                <button data-command="!st trusted">信頼一覧</button>
+                <button data-command='!st emergency "UI emergency sweep"' class="danger-soft">緊急排除</button>
+              </div>
             </div>
-          </div>
-          <div id="network-panel" class="stack"></div>
-        </section>
-      </section>
 
-      <section class="panel">
-        <div class="panel-head">
-          <div>
-            <h2>注意事項</h2>
-            <p class="muted">UI で扱える情報の限界です。</p>
-          </div>
-        </div>
-        <div id="caveats" class="caveat-list"></div>
-      </section>
+            <form id="command-form" class="command-form">
+              <input
+                id="command-input"
+                type="text"
+                placeholder='例: !st trust name "FriendName" "friend"'
+                autocomplete="off"
+              />
+              <button type="submit" class="primary">送信</button>
+            </form>
+          </section>
 
-      <section class="panel">
-        <div class="panel-head">
-          <div>
-            <h2>最新イベント</h2>
-            <p class="muted">新しい順に最大 180 件まで表示します。</p>
-          </div>
-        </div>
-        <div id="event-list" class="event-list"></div>
-      </section>
+          <section class="panel">
+            <div class="panel-head">
+              <div>
+                <h2>現在参加中のプレイヤー</h2>
+                <p class="muted">いまワールドにいるプレイヤーだけを表示します。</p>
+              </div>
+              <p id="meta-line" class="muted"></p>
+            </div>
+            <div id="player-list" class="player-grid"></div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <div>
+                <h2>注意事項</h2>
+                <p class="muted">UI で扱える情報の限界です。</p>
+              </div>
+            </div>
+            <div id="caveats" class="caveat-list"></div>
+          </section>
+        </main>
+
+        <aside class="side-column">
+          <section class="panel live-panel">
+            <div class="panel-head compact">
+              <div>
+                <h2>ライブログ</h2>
+                <p class="muted">右側で常時更新します。</p>
+              </div>
+              <div id="live-status" class="status-pill">自動更新</div>
+            </div>
+            <div id="event-list" class="event-list"></div>
+          </section>
+
+          <section class="panel side-panel">
+            <div class="panel-head compact">
+              <div>
+                <h2>通信観測</h2>
+                <p class="muted">ホスト PC から見えた TCP / UDP 情報です。</p>
+              </div>
+            </div>
+            <div id="network-panel" class="stack"></div>
+          </section>
+        </aside>
+      </div>
     </div>
 
     <template id="player-card-template">

@@ -5,15 +5,24 @@ const playerList = document.querySelector("#player-list");
 const eventList = document.querySelector("#event-list");
 const networkPanel = document.querySelector("#network-panel");
 const commandStatus = document.querySelector("#command-status");
+const liveStatus = document.querySelector("#live-status");
 const commandForm = document.querySelector("#command-form");
 const commandInput = document.querySelector("#command-input");
 const markExternalButton = document.querySelector("#mark-external-button");
 const playerCardTemplate = document.querySelector("#player-card-template");
+
 const DEFAULT_CAVEATS = [
   "この UI は Content Log に出た SpamTrace 情報だけを使います。",
   "ローカルワールドでは、参加者の本当の IP や Microsoft リレーの内側までは確定できません。",
   "ここで見える通信先はホスト PC 視点の観測であり、犯人の真の送信元を保証しません。"
 ];
+
+const STATE_POLL_MS = 2500;
+const NETWORK_POLL_MS = 8000;
+
+let statePollTimer = null;
+let networkPollTimer = null;
+let lastEventSignature = "";
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -61,6 +70,11 @@ function setStatus(text, tone = "idle") {
   commandStatus.dataset.tone = tone;
 }
 
+function setLiveStatus(text, tone = "idle") {
+  liveStatus.textContent = text;
+  liveStatus.dataset.tone = tone;
+}
+
 async function fetchJson(url, options) {
   const response = await fetch(url, options);
   if (!response.ok) {
@@ -104,13 +118,13 @@ function summaryCard(label, value, note) {
 function renderSummary(state) {
   summaryGrid.innerHTML = [
     summaryCard("現在参加中", state.summary.onlinePlayers ?? 0, "いまワールド内にいる人数"),
-    summaryCard("累計イベント", state.summary.events, "Content Log から読めた総イベント数"),
-    summaryCard("怪しいイベント", state.summary.suspiciousEvents, "スパム、異常名、ブロック一致など"),
-    summaryCard("ブロック登録", state.summary.blocklistEntries, "現在のブロック件数")
+    summaryCard("累計イベント", state.summary.events ?? 0, "Content Log から読めた総イベント数"),
+    summaryCard("怪しいイベント", state.summary.suspiciousEvents ?? 0, "スパム、異常名、ブロック一致など"),
+    summaryCard("ブロック登録", state.summary.blocklistEntries ?? 0, "現在のブロック件数")
   ].join("");
 
   metaLine.textContent = `最終更新 ${formatIso(state.generatedAt)}`;
-  caveats.innerHTML = (DEFAULT_CAVEATS || []).map((item) => `<p class="caveat-item">${escapeHtml(item)}</p>`).join("");
+  caveats.innerHTML = DEFAULT_CAVEATS.map((item) => `<p class="caveat-item">${escapeHtml(item)}</p>`).join("");
 }
 
 function createTag(label, tone = "neutral") {
@@ -169,17 +183,11 @@ function playerTone(player) {
 function buildPlayerTags(player) {
   const tags = [];
 
-  if (player.admin) {
-    tags.push({ label: "管理者", tone: "ok" });
-  }
   if (player.trusted) {
     tags.push({ label: "信頼済み", tone: "ok" });
   }
   if (player.blocklisted) {
     tags.push({ label: "ブロック済み", tone: "danger" });
-  }
-  if (player.pendingApproval) {
-    tags.push({ label: "承認待ち", tone: "warn" });
   }
 
   for (const label of (player.messageReasons || []).map((item) => `msg:${item}`)) {
@@ -204,16 +212,15 @@ function renderPlayers(players) {
   for (const player of players) {
     const fragment = playerCardTemplate.content.cloneNode(true);
     const root = fragment.querySelector(".player-card");
-    const name = pickName(player);
 
-    fragment.querySelector(".player-name").textContent = name;
+    fragment.querySelector(".player-name").textContent = pickName(player);
     fragment.querySelector(".player-subline").textContent = `最終観測 ${formatIso(player.lastSeenAt)}`;
     fragment.querySelector(".score-pill").textContent = `score ${player.score ?? 0}`;
     fragment.querySelector(".player-id").textContent = player.id || "なし";
     fragment.querySelector(".player-nametag").textContent = player.nameTag || "なし";
     fragment.querySelector(".player-location").textContent = formatLocation(player);
     fragment.querySelector(".player-stats").textContent =
-      `join ${player.joinCount} / leave ${player.leaveCount} / spawn ${player.spawnCount} / suspicious ${player.suspiciousCount}`;
+      `join ${player.joinCount ?? 0} / leave ${player.leaveCount ?? 0} / spawn ${player.spawnCount ?? 0} / suspicious ${player.suspiciousCount ?? 0}`;
     fragment.querySelector(".player-message").textContent = player.lastMessage ? `最後の怪しい発言: ${player.lastMessage}` : "";
 
     const tagRow = fragment.querySelector(".tag-row");
@@ -308,6 +315,12 @@ function eventDetail(event) {
 }
 
 function renderEvents(events) {
+  const nextSignature = (events || []).map((event) => event.eventId).join("|");
+  if (nextSignature === lastEventSignature) {
+    return;
+  }
+
+  lastEventSignature = nextSignature;
   eventList.innerHTML = "";
 
   if (!events.length) {
@@ -347,11 +360,11 @@ function renderNetwork(snapshot) {
   }
 
   const tcpRows = (snapshot.tcp || [])
-    .slice(0, 10)
+    .slice(0, 12)
     .map((entry) => `<li>${escapeHtml(`${entry.LocalAddress}:${entry.LocalPort} -> ${entry.RemoteAddress}:${entry.RemotePort} (${entry.State})`)}</li>`)
     .join("");
   const udpRows = (snapshot.udp || [])
-    .slice(0, 10)
+    .slice(0, 12)
     .map((entry) => `<li>${escapeHtml(`${entry.LocalAddress}:${entry.LocalPort}`)}</li>`)
     .join("");
 
@@ -374,11 +387,17 @@ function renderNetwork(snapshot) {
   `;
 }
 
-async function refreshState() {
+async function refreshState({ silent = false } = {}) {
   const state = await fetchJson("/api/state");
   renderSummary(state);
   renderPlayers(state.onlinePlayers || []);
   renderEvents(state.events || []);
+
+  if (silent) {
+    setLiveStatus(`自動更新 ${formatIso(state.generatedAt)}`, "ok");
+  }
+
+  return state;
 }
 
 async function refreshNetwork() {
@@ -386,17 +405,36 @@ async function refreshNetwork() {
   renderNetwork(snapshot);
 }
 
-async function refreshAll() {
+async function refreshAll({ silent = false } = {}) {
   try {
-    await refreshState();
+    await refreshState({ silent });
     await refreshNetwork();
-    setStatus("更新完了", "ok");
+    if (!silent) {
+      setStatus("更新完了", "ok");
+    }
   } catch (error) {
     setStatus(`更新失敗: ${error.message}`, "error");
+    setLiveStatus("自動更新失敗", "error");
   }
 }
 
-document.querySelector("#refresh-button").addEventListener("click", refreshAll);
+function startPolling() {
+  statePollTimer = window.setInterval(() => {
+    if (!document.hidden) {
+      refreshState({ silent: true }).catch(() => {});
+    }
+  }, STATE_POLL_MS);
+
+  networkPollTimer = window.setInterval(() => {
+    if (!document.hidden) {
+      refreshNetwork().catch(() => {});
+    }
+  }, NETWORK_POLL_MS);
+}
+
+document.querySelector("#refresh-button").addEventListener("click", () => {
+  refreshAll({ silent: false });
+});
 
 document.querySelectorAll("[data-command]").forEach((button) => {
   button.addEventListener("click", () => {
@@ -422,4 +460,7 @@ commandForm.addEventListener("submit", (event) => {
   commandInput.select();
 });
 
-refreshAll();
+setStatus("待機中", "idle");
+setLiveStatus(`自動更新 ${STATE_POLL_MS / 1000}秒`, "ok");
+refreshAll({ silent: false });
+startPolling();
