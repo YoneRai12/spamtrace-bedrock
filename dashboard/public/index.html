@@ -94,12 +94,15 @@
             <form id="command-form" class="command-form">
               <label class="input-label" for="command-input">手入力コマンド</label>
               <div class="command-row">
-                <input
-                  id="command-input"
-                  type="text"
-                  placeholder='例: !st trust name "FriendName" "friend"'
-                  autocomplete="off"
-                />
+                <div class="command-shell">
+                  <span class="command-prompt">$</span>
+                  <input
+                    id="command-input"
+                    type="text"
+                    placeholder='!st trust name "FriendName" "friend"'
+                    autocomplete="off"
+                  />
+                </div>
                 <button type="submit" class="primary">送信</button>
               </div>
             </form>
