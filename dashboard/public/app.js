@@ -4,6 +4,7 @@ const caveats = document.querySelector("#caveats");
 const playerList = document.querySelector("#player-list");
 const eventList = document.querySelector("#event-list");
 const networkPanel = document.querySelector("#network-panel");
+const onlineCountBadge = document.querySelector("#online-count-badge");
 const commandStatus = document.querySelector("#command-status");
 const liveStatus = document.querySelector("#live-status");
 const commandForm = document.querySelector("#command-form");
@@ -20,8 +21,6 @@ const DEFAULT_CAVEATS = [
 const STATE_POLL_MS = 2500;
 const NETWORK_POLL_MS = 8000;
 
-let statePollTimer = null;
-let networkPollTimer = null;
 let lastEventSignature = "";
 
 function escapeHtml(value) {
@@ -55,6 +54,23 @@ function formatIso(isoText) {
   });
 }
 
+function formatShortTimestamp(isoText) {
+  if (!isoText) {
+    return "未観測";
+  }
+
+  const date = new Date(isoText);
+  if (Number.isNaN(date.getTime())) {
+    return isoText;
+  }
+
+  return date.toLocaleString("ja-JP", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit"
+  });
+}
+
 function formatLocation(player) {
   if (!player.lastLocation) {
     return player.lastDimension || "不明";
@@ -63,6 +79,15 @@ function formatLocation(player) {
   const { x, y, z } = player.lastLocation;
   const coords = [x, y, z].map((value) => (typeof value === "number" ? value.toFixed(0) : "?")).join(", ");
   return player.lastDimension ? `${player.lastDimension} / ${coords}` : coords;
+}
+
+function initialsFromName(name) {
+  const trimmed = String(name || "?").trim();
+  if (!trimmed) {
+    return "?";
+  }
+
+  return trimmed.replace(/\s+/g, "").slice(0, 2).toUpperCase();
 }
 
 function setStatus(text, tone = "idle") {
@@ -106,8 +131,17 @@ async function sendCommand(command) {
 }
 
 function summaryCard(label, value, note) {
+  let accent = "neutral";
+  if (label === "現在参加中") {
+    accent = "ok";
+  } else if (label === "怪しいイベント") {
+    accent = "warn";
+  } else if (label === "ブロック登録") {
+    accent = "danger";
+  }
+
   return `
-    <article class="summary-card">
+    <article class="summary-card" data-accent="${accent}">
       <p class="summary-label">${escapeHtml(label)}</p>
       <p class="summary-value">${escapeHtml(value)}</p>
       <p class="summary-note">${escapeHtml(note)}</p>
@@ -124,6 +158,7 @@ function renderSummary(state) {
   ].join("");
 
   metaLine.textContent = `最終更新 ${formatIso(state.generatedAt)}`;
+  onlineCountBadge.textContent = `${state.summary.onlinePlayers ?? 0} 人`;
   caveats.innerHTML = DEFAULT_CAVEATS.map((item) => `<p class="caveat-item">${escapeHtml(item)}</p>`).join("");
 }
 
@@ -133,6 +168,22 @@ function createTag(label, tone = "neutral") {
   span.dataset.tone = tone;
   span.textContent = label;
   return span;
+}
+
+function createSignalChip(label, value, tone = "neutral") {
+  const chip = document.createElement("span");
+  chip.className = "signal-chip";
+  chip.dataset.tone = tone;
+
+  const strong = document.createElement("strong");
+  strong.textContent = String(value);
+  chip.append(strong);
+
+  const text = document.createElement("span");
+  text.textContent = label;
+  chip.append(text);
+
+  return chip;
 }
 
 function pickName(player) {
@@ -177,56 +228,105 @@ function playerTone(player) {
   if ((player.score || 0) >= 8) {
     return "warn";
   }
+  if ((player.score || 0) === 0) {
+    return "ok";
+  }
   return "neutral";
 }
 
 function buildPlayerTags(player) {
   const tags = [];
 
+  if (player.admin) {
+    tags.push({ label: "管理者", tone: "ok" });
+  }
   if (player.trusted) {
     tags.push({ label: "信頼済み", tone: "ok" });
+  }
+  if (player.pendingApproval) {
+    tags.push({ label: "承認待ち", tone: "warn" });
   }
   if (player.blocklisted) {
     tags.push({ label: "ブロック済み", tone: "danger" });
   }
 
-  for (const label of (player.messageReasons || []).map((item) => `msg:${item}`)) {
-    tags.push({ label, tone: "warn" });
+  for (const label of player.indicatorTags || []) {
+    const tone = label.includes("ブロック") ? "danger" : "warn";
+    tags.push({ label, tone });
   }
 
-  for (const label of (player.reasons || []).map((item) => `player:${item}`)) {
-    tags.push({ label, tone: "neutral" });
+  return tags.slice(0, 6);
+}
+
+function summarizeReasons(player) {
+  const parts = [];
+
+  if (Array.isArray(player.indicatorTags) && player.indicatorTags.length) {
+    parts.push(...player.indicatorTags);
+  }
+  if (Array.isArray(player.messageReasons) && player.messageReasons.length) {
+    parts.push(...player.messageReasons.map((item) => `msg:${item}`));
+  }
+  if (Array.isArray(player.reasons) && player.reasons.length) {
+    parts.push(...player.reasons.map((item) => `player:${item}`));
   }
 
-  return tags.slice(0, 8);
+  return parts.slice(0, 4).join(" / ");
 }
 
 function renderPlayers(players) {
   playerList.innerHTML = "";
 
   if (!players.length) {
+    onlineCountBadge.textContent = "0 人";
     playerList.innerHTML = '<p class="empty-state">現在参加中のプレイヤーはいません。</p>';
     return;
   }
 
+  onlineCountBadge.textContent = `${players.length} 人`;
+
   for (const player of players) {
     const fragment = playerCardTemplate.content.cloneNode(true);
     const root = fragment.querySelector(".player-card");
+    const score = player.score ?? 0;
+    const playerName = pickName(player);
 
-    fragment.querySelector(".player-name").textContent = pickName(player);
-    fragment.querySelector(".player-subline").textContent = `最終観測 ${formatIso(player.lastSeenAt)}`;
-    fragment.querySelector(".score-pill").textContent = `score ${player.score ?? 0}`;
+    fragment.querySelector(".player-avatar").textContent = initialsFromName(playerName);
+    fragment.querySelector(".player-name").textContent = playerName;
+    fragment.querySelector(".player-subline").textContent = `最終観測 ${formatShortTimestamp(player.lastSeenAt)}`;
+
+    const scorePill = fragment.querySelector(".score-pill");
+    scorePill.textContent = `trace ${score}`;
+    scorePill.dataset.tone = playerTone(player);
+
     fragment.querySelector(".player-id").textContent = player.id || "なし";
     fragment.querySelector(".player-nametag").textContent = player.nameTag || "なし";
     fragment.querySelector(".player-location").textContent = formatLocation(player);
     fragment.querySelector(".player-stats").textContent =
       `join ${player.joinCount ?? 0} / leave ${player.leaveCount ?? 0} / spawn ${player.spawnCount ?? 0} / suspicious ${player.suspiciousCount ?? 0}`;
-    fragment.querySelector(".player-message").textContent = player.lastMessage ? `最後の怪しい発言: ${player.lastMessage}` : "";
+
+    const signalRow = fragment.querySelector(".player-signal-row");
+    signalRow.append(createSignalChip("join", player.joinCount ?? 0));
+    signalRow.append(createSignalChip("spawn", player.spawnCount ?? 0));
+    signalRow.append(createSignalChip("leave", player.leaveCount ?? 0));
+    signalRow.append(
+      createSignalChip("suspicious", player.suspiciousCount ?? 0, (player.suspiciousCount ?? 0) > 0 ? "warn" : "neutral")
+    );
+    signalRow.append(
+      createSignalChip("anomaly", player.anomalyCount ?? 0, (player.anomalyCount ?? 0) > 0 ? "warn" : "neutral")
+    );
+    signalRow.append(
+      createSignalChip("blockHit", player.blockHitCount ?? 0, (player.blockHitCount ?? 0) > 0 ? "danger" : "neutral")
+    );
 
     const tagRow = fragment.querySelector(".tag-row");
     for (const tag of buildPlayerTags(player)) {
       tagRow.append(createTag(tag.label, tag.tone));
     }
+
+    const reasonText = summarizeReasons(player);
+    fragment.querySelector(".player-reason").textContent = reasonText ? `観測フラグ: ${reasonText}` : "";
+    fragment.querySelector(".player-message").textContent = player.lastMessage ? `最後の怪しい発言: ${player.lastMessage}` : "";
 
     fragment.querySelector(".kick-button").addEventListener("click", () => sendCommand(buildKickCommand(player)));
     fragment.querySelector(".quarantine-button").addEventListener("click", () => {
@@ -314,6 +414,17 @@ function eventDetail(event) {
   return parts.join(" / ");
 }
 
+function eventTone(event) {
+  const label = String(event.label || "");
+  if (label === "suspicious_chat" || label === "blocklist_match" || label === "auto_block_suspicious") {
+    return "danger";
+  }
+  if (label === "player_anomaly_scan" || label === "join_resolved" || label === "pending_approval") {
+    return "warn";
+  }
+  return "neutral";
+}
+
 function renderEvents(events) {
   const nextSignature = (events || []).map((event) => event.eventId).join("|");
   if (nextSignature === lastEventSignature) {
@@ -331,13 +442,13 @@ function renderEvents(events) {
   eventList.innerHTML = events
     .map(
       (event) => `
-      <article class="event-item">
+      <article class="event-item" data-tone="${escapeHtml(eventTone(event))}">
         <div class="event-head">
           <span class="event-label">${escapeHtml(event.label)}</span>
           <span class="muted">${escapeHtml(formatIso(event.occurredAt))}</span>
         </div>
         <p class="event-title">${escapeHtml(eventTitle(event))}</p>
-        <p class="muted">${escapeHtml(eventDetail(event))}</p>
+        <p class="event-note">${escapeHtml(eventDetail(event))}</p>
         <p class="tiny">${escapeHtml(`${event.sourceFile}:${event.lineNumber}`)}</p>
       </article>
     `
@@ -354,7 +465,7 @@ function renderNetwork(snapshot) {
   if (!snapshot.running) {
     networkPanel.innerHTML = `
       <p class="empty-state">Minecraft は起動していません。</p>
-      <p class="muted">${escapeHtml(snapshot.caveat || "")}</p>
+      <p class="network-card">${escapeHtml(snapshot.caveat || "")}</p>
     `;
     return;
   }
@@ -370,16 +481,22 @@ function renderNetwork(snapshot) {
 
   networkPanel.innerHTML = `
     <div class="network-summary">
-      <p><strong>プロセス</strong> ${escapeHtml(snapshot.process?.name || "なし")}</p>
-      <p><strong>PID</strong> ${escapeHtml(snapshot.process?.id || "なし")}</p>
+      <article class="network-card">
+        <span class="summary-label">プロセス</span>
+        <strong>${escapeHtml(snapshot.process?.name || "なし")}</strong>
+      </article>
+      <article class="network-card">
+        <span class="summary-label">PID</span>
+        <strong>${escapeHtml(snapshot.process?.id || "なし")}</strong>
+      </article>
     </div>
-    <p class="muted">${escapeHtml(snapshot.caveat || "")}</p>
+    <p class="network-card">${escapeHtml(snapshot.caveat || "")}</p>
     <div class="network-columns">
-      <div>
+      <div class="network-card">
         <h3>TCP</h3>
         <ul>${tcpRows || "<li>なし</li>"}</ul>
       </div>
-      <div>
+      <div class="network-card">
         <h3>UDP</h3>
         <ul>${udpRows || "<li>なし</li>"}</ul>
       </div>
@@ -395,6 +512,8 @@ async function refreshState({ silent = false } = {}) {
 
   if (silent) {
     setLiveStatus(`自動更新 ${formatIso(state.generatedAt)}`, "ok");
+  } else {
+    setLiveStatus(`同期 ${formatIso(state.generatedAt)}`, "ok");
   }
 
   return state;
@@ -419,13 +538,13 @@ async function refreshAll({ silent = false } = {}) {
 }
 
 function startPolling() {
-  statePollTimer = window.setInterval(() => {
+  window.setInterval(() => {
     if (!document.hidden) {
       refreshState({ silent: true }).catch(() => {});
     }
   }, STATE_POLL_MS);
 
-  networkPollTimer = window.setInterval(() => {
+  window.setInterval(() => {
     if (!document.hidden) {
       refreshNetwork().catch(() => {});
     }
